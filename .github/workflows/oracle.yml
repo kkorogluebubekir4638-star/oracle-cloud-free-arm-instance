@@ -17,34 +17,19 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install OCI CLI via PIP
-        run: |
-          pip install oci-cli
-          echo "OCI CLI başarıyla kuruldu."
-
-      - name: Create Required .env and Config Files
-        run: |
-          # Temiz bir oci klasörü açıyoruz
-          mkdir -p ~/.oci
-          
-          # Private key dosyasını sisteme yazıyoruz
-          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/key.pem
-          chmod 600 ~/.oci/key.pem
-          
-          # Scriptin illa klasör içinde aradığı .env dosyasını onun istediği isimlerle oluşturuyoruz:
-          echo "user=${{ secrets.OCI_USER_OCID }}" > .env
-          echo "fingerprint=${{ secrets.OCI_FINGERPRINT }}" >> .env
-          echo "tenancy=${{ secrets.OCI_TENANCY_OCID }}" >> .env
-          echo "region=${{ secrets.OCI_REGION }}" >> .env
-          echo "key_file=/home/runner/.oci/key.pem" >> .env
-          echo "subnetId=${{ secrets.OCI_SUBNET_ID }}" >> .env
-          echo "imageId=${{ secrets.OCI_IMAGE_ID }}" >> .env
-          echo "availabilityDomain=${{ secrets.OCI_AVAILABILITY_DOMAIN }}" >> .env
-          
-          # OCI CLI'ın arka planda compartment hatası vermemesi için genel çevre değişkenini de tanımlıyoruz
-          echo "OCI_COMPARTMENT_ID=${{ secrets.OCI_TENANCY_OCID }}" >> $GITHUB_ENV
+      - name: Install OCI CLI
+        run: pip install oci-cli
 
       - name: Run Oracle Creator Script
+        env:
+          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
+          OCI_IMAGE_ID: ${{ secrets.OCI_IMAGE_ID }}
+          OCI_AVAILABILITY_DOMAIN: ${{ secrets.OCI_AVAILABILITY_DOMAIN }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
         run: |
           chmod +x oracle_cloud_instance_creator.sh
           ./oracle_cloud_instance_creator.sh
