@@ -22,6 +22,12 @@ jobs:
           pip install oci-cli
           echo "OCI CLI başarıyla kuruldu."
 
+      - name: Configure OCI Environment Variables
+        run: |
+          # Scriptin compartment hatası vermemesi için gerekli çevre değişkenini sisteme kaydediyoruz
+          echo "OCI_TENANCY_ID=${{ secrets.OCI_TENANCY_OCID }}" >> $GITHUB_ENV
+          echo "TENANCY_ID=${{ secrets.OCI_TENANCY_OCID }}" >> $GITHUB_ENV
+
       - name: Run Oracle Creator Script
         env:
           OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
@@ -32,6 +38,8 @@ jobs:
           OCI_IMAGE_ID: ${{ secrets.OCI_IMAGE_ID }}
           OCI_AVAILABILITY_DOMAIN: ${{ secrets.OCI_AVAILABILITY_DOMAIN }}
           OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          # Burası scriptin eksik bulduğu kimliği tamamlıyor:
+          OCI_COMPARTMENT_ID: ${{ secrets.OCI_TENANCY_OCID }}
         run: |
           chmod +x oracle_cloud_instance_creator.sh
           ./oracle_cloud_instance_creator.sh
