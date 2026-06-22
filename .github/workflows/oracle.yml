@@ -3,7 +3,7 @@ name: Oracle Cloud Free ARM Instance
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/3 * * * *' # GitHub'ın izin verdiği en sık aralıklarla (3-5 dk) otomatik tetikler
 
 jobs:
   run-bot:
