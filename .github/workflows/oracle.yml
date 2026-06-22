@@ -12,12 +12,15 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install OCI CLI (Fixed)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install OCI CLI via PIP
         run: |
-          curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh -o install.sh
-          chmod +x install.sh
-          ./install.sh --silent --accept-all-defaults
-          echo "/home/runner/bin" >> $GITHUB_PATH
+          pip install oci-cli
+          echo "OCI CLI başarıyla kuruldu."
 
       - name: Run Oracle Creator Script
         env:
