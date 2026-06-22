@@ -3,7 +3,7 @@ name: Oracle Cloud Free ARM Instance
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/5 * * * *' # Her 5 dakikada bir otomatik çalışır
+    - cron: '*/5 * * * *'
 
 jobs:
   run-bot:
@@ -12,9 +12,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install OCI CLI
+      - name: Install OCI CLI (Fixed)
         run: |
-          bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh) --silent --accept-all-defaults"
+          curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh -o install.sh
+          chmod +x install.sh
+          ./install.sh --silent --accept-all-defaults
           echo "/home/runner/bin" >> $GITHUB_PATH
 
       - name: Run Oracle Creator Script
