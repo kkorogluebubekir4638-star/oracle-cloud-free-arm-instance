@@ -12,6 +12,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Install OCI CLI
+        run: |
+          bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh) --silent --accept-all-defaults"
+          echo "/home/runner/bin" >> $GITHUB_PATH
+
       - name: Run Oracle Creator Script
         env:
           OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
