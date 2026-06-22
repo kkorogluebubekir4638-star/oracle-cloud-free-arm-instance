@@ -1,50 +1,37 @@
 #!/bin/bash
 
-source .env
+echo "=== Oracle ARM Bot Baslatiliyor ==="
 
-if [[ -z "${TENANCY_ID}" ]]; then
-    echo "TENANCY_ID is unset or empty. Please change in .env file"
-    exit 1
-else
-    echo "TENANCY_ID is set correctly"
-fi
+# OCI Yapılandırma Dosyasını Olustur
+mkdir -p ~/.oci
+echo "[DEFAULT]" > ~/.oci/config
+echo "user=$OCI_USER_OCID" >> ~/.oci/config
+echo "fingerprint=$OCI_FINGERPRINT" >> ~/.oci/config
+echo "tenancy=$OCI_TENANCY_OCID" >> ~/.oci/config
+echo "region=$OCI_REGION" >> ~/.oci/config
+echo "key_file=/home/runner/.oci/key.pem" >> ~/.oci/config
 
-# To verify that the authentication with Oracle cloud works
-echo "Checking Connection with this request: "
-oci iam compartment list
+# Private Key'i yaz
+echo "$OCI_PRIVATE_KEY" > ~/.oci/key.pem
+chmod 600 ~/.oci/key.pem
+
+echo "Bağlantı test ediliyor..."
+oci iam compartment list --compartment-id "$OCI_TENANCY_OCID" > /dev/null
+
 if [ $? -ne 0 ]; then
-    echo "Connection to Oracle cloud is not working. Check your setup and config again!"
+    echo "Hata: Oracle Cloud bağlantısı başarısız! Girdiğiniz şifreleri (Secrets) kontrol edin."
     exit 1
 fi
 
-# ----------------------CUSTOMIZE---------------------------------------------------------------------------------------
+echo "Bağlantı başarılı! İstek döngüsü başlatılıyor..."
 
-# Don't go too low or you run into 429 TooManyRequests
-requestInterval=60 # seconds
-
-# VM params
-cpus=4 # max 4 cores
-ram=24 # max 24gb memory
-bootVolume=50 # disk size in gb
-
-profile="DEFAULT"
-
-# ----------------------ENDLESS LOOP TO REQUEST AN ARM INSTANCE---------------------------------------------------------
-
-while true; do
-
-    oci compute instance launch --no-retry  \
-    --auth api_key \
-    --profile "$profile" \
-    --display-name big-arm \
-    --compartment-id "$TENANCY_ID" \
-    --image-id "$IMAGE_ID" \
-    --subnet-id "$SUBNET_ID" \
-    --availability-domain "$AVAILABILITY_DOMAIN" \
-    --shape 'VM.Standard.A1.Flex' \
-    --shape-config "{'ocpus':$cpus,'memoryInGBs':$ram}" \
-    --boot-volume-size-in-gbs "$bootVolume" \
-    --ssh-authorized-keys-file "$PATH_TO_PUBLIC_SSH_KEY"
-
-    sleep $requestInterval
-done
+# Sunucu oluşturma komutunu tetikle
+oci compute instance launch \
+  --availability-domain "$OCI_AVAILABILITY_DOMAIN" \
+  --compartment-id "$OCI_TENANCY_OCID" \
+  --shape "VM.Standard.A1.Flex" \
+  --shape-config '{"ocpus":4,"memoryInGBs":24}' \
+  --display-name "Kayseri-ARM-Sunucu" \
+  --image-id "$OCI_IMAGE_ID" \
+  --subnet-id "$OCI_SUBNET_ID" \
+  --assign-public-ip true
