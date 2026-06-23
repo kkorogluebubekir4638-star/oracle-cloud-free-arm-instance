@@ -23,7 +23,7 @@ while [ $COUNTER -lt $MAX_RETRIES ]; do
         --assign-public-ip true \
         --subnet-id "$SUBNET_ID" \
         --image-id "$IMAGE_ID" \
-        --ssh-authorized-keys "$SSH_AUTHORIZED_KEYS" \
+        --ssh-authorized-keys-file "$SSH_AUTHORIZED_KEYS" \
         --shape-config '{"ocpus": 4, "memoryInGBs": 24}' \
         --display-name "Oracle-Free-ARM" 2>&1)
 
