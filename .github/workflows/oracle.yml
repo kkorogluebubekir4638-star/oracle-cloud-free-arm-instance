@@ -1,38 +1,55 @@
-name: Oracle Cloud Free ARM Instance
+#!/bin/bash
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-  schedule:
-    - cron: '*/5 * * * *' # GitHub'ın zamanlayıcıyı engellememesi için 5 dk en kararlı süredir
+# Read .env file
+export $(grep -v '^#' .env | xargs)
 
-jobs:
-  run-bot:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+# In case you have spaces in your SSH key
+SSH_AUTHORIZED_KEYS=$(cat .env | grep SSH_AUTHORIZED_KEYS | cut -d '=' -f2-)
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+COUNTER=0
+MAX_RETRIES=65
+SLEEP_TIME=300
 
-      - name: Install OCI CLI
-        run: pip install oci-cli
+while [ $COUNTER -lt $MAX_RETRIES ]; do
+    COUNTER=$((COUNTER + 1))
+    echo "----------------------------------------"
+    echo "Deneme Sayısı: $COUNTER - Tarih: $(date)"
+    
+    # Run the OCI CLI command and capture both standard output and standard error
+    output=$(oci compute instance launch \
+        --availability-domain "$AVAILABILITY_DOMAIN" \
+        --compartment-id "$TENANCY_ID" \
+        --shape "$SHAPE" \
+        --assign-public-ip true \
+        --subnet-id "$SUBNET_ID" \
+        --image-id "$IMAGE_ID" \
+        --ssh-authorized-keys-file "$SSH_AUTHORIZED_KEYS" \
+        --shape-config '{"ocpus": 4, "memoryInGBs": 24}' \
+        --display-name "Oracle-Free-ARM" 2>&1)
 
-      - name: Run Oracle Creator Script
-        env:
-          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
-          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
-          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
-          OCI_REGION: ${{ secrets.OCI_REGION }}
-          OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
-          OCI_IMAGE_ID: ${{ secrets.OCI_IMAGE_ID }}
-          OCI_AVAILABILITY_DOMAIN: ${{ secrets.OCI_AVAILABILITY_DOMAIN }}
-          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
-        run: |
-          chmod +x oracle_cloud_instance_creator.sh
-          ./oracle_cloud_instance_creator.sh
+    # Check if the output contains the specific service error for out of host capacity
+    if [[ "$output" == *"Out of host capacity"* ]]; then
+        echo "Kapasite yetersiz. 5 dakika bekleniyor..."
+        sleep $SLEEP_TIME
+    # Check if Oracle hits us with too many requests limit
+    elif [[ "$output" == *"TooManyRequests"* || "$output" == *"Too many requests"* ]]; then
+        echo "Oracle: Çok fazla istek gönderildi (429). Döngü kırılmıyor, 5 dakika bekleniyor..."
+        sleep $SLEEP_TIME
+    # Check if the connection to Oracle API gateway timed out
+    elif [[ "$output" == *"timed out"* || "$output" == *"RequestException"* || "$output" == *"connection"* ]]; then
+        echo "Bağlantı zaman aşımına uğradı veya koptu (Oracle geç cevap verdi)."
+        echo "Döngü kırılmıyor, 5 dakika sonra tekrar denenecek..."
+        sleep $SLEEP_TIME
+    else
+        # If there is no specific error string, check if the output indicates success or unexpected error
+        if [[ "$output" == *"id"* && "$output" == *"lifecycle-state"* ]]; then
+            echo "TEBRİKLER! Sunucu başarıyla oluşturuldu!"
+            echo "$output"
+            break
+        else
+            echo "Bilinmeyen veya geçici bir yanıt alındı. Döngü riske atılmıyor, pusuya devam..."
+            echo "$output"
+            sleep $SLEEP_TIME
+        fi
+    fi
+done
