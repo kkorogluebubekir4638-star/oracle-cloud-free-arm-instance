@@ -6,12 +6,6 @@ export $(grep -v '^#' .env | xargs)
 # In case you have spaces in your SSH key
 SSH_AUTHORIZED_KEYS=$(cat .env | grep SSH_AUTHORIZED_KEYS | cut -d '=' -f2-)
 
-# Test environment variables
-if [ -z "$TENANCY_ID" ] || [ -z "$USER_ID" ] || [ -z "$FINGERPRINT" ] || [ -z "$PRIVATE_KEY_PATH" ] || [ -z "$SUBNET_ID" ] || [ -z "$IMAGE_ID" ] || [ -z "$SSH_AUTHORIZED_KEYS" ] || [ -z "$AVAILABILITY_DOMAIN" ] || [ -z "$SHAPE" ]; then
-    echo "One or more environment variables are missing. Please check your .env file."
-    exit 1
-fi
-
 COUNTER=0
 MAX_RETRIES=65
 SLEEP_TIME=300
