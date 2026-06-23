@@ -1,56 +1,61 @@
 #!/bin/bash
 
-echo "=== Oracle ARM Bot Baslatiliyor ==="
+# Read .env file
+export $(grep -v '^#' .env | xargs)
 
-# OCI Yapılandırma Dosyasını Olustur
-mkdir -p ~/.oci
-echo "[DEFAULT]" > ~/.oci/config
-echo "user=$OCI_USER_OCID" >> ~/.oci/config
-echo "fingerprint=$OCI_FINGERPRINT" >> ~/.oci/config
-echo "tenancy=$OCI_TENANCY_OCID" >> ~/.oci/config
-echo "region=$OCI_REGION" >> ~/.oci/config
-echo "key_file=/home/runner/.oci/key.pem" >> ~/.oci/config
+# In case you have spaces in your SSH key
+SSH_AUTHORIZED_KEYS=$(cat .env | grep SSH_AUTHORIZED_KEYS | cut -d '=' -f2-)
 
-# Private Key'i yaz
-echo "$OCI_PRIVATE_KEY" > ~/.oci/key.pem
-chmod 600 ~/.oci/key.pem
-
-echo "Bağlantı test ediliyor..."
-oci iam compartment list --compartment-id "$OCI_TENANCY_OCID" > /dev/null
-
-if [ $? -ne 0 ]; then
-    echo "Hata: Oracle Cloud bağlantısı başarısız! Girdiğiniz şifreleri (Secrets) kontrol edin."
+# Test environment variables
+if [ -z "$TENANCY_ID" ] || [ -z "$USER_ID" ] || [ -z "$FINGERPRINT" ] || [ -z "$PRIVATE_KEY_PATH" ] || [ -z "$SUBNET_ID" ] || [ -z "$IMAGE_ID" ] || [ -z "$SSH_AUTHORIZED_KEYS" ] || [ -z "$AVAILABILITY_DOMAIN" ] || [ -z "$SHAPE" ]; then
+    echo "One or more environment variables are missing. Please check your .env file."
     exit 1
 fi
 
-echo "Bağlantı başarılı! Sonsuz istek döngüsü başlatılıyor..."
+COUNTER=0
+MAX_RETRIES=65
+SLEEP_TIME=300
 
-# GitHub Actions tek seferde en fazla 6 saat çalışabilir. 
-# Bu yüzden botu 5 buçuk saat boyunca içeride aralıksız döndüreceğiz.
-for ((i=1; i<=65; i++))
-do
-   echo "----------------------------------------"
-   echo "Deneme Sayısı: $i - Tarih: $(date)"
-   
-   # Sunucu oluşturma komutunu tetikle
-   OUTPUT=$(oci compute instance launch \
-     --availability-domain "$OCI_AVAILABILITY_DOMAIN" \
-     --compartment-id "$OCI_TENANCY_OCID" \
-     --shape "VM.Standard.A1.Flex" \
-     --shape-config '{"ocpus":4,"memoryInGBs":24}' \
-     --display-name "Kayseri-ARM-Sunucu" \
-     --image-id "$OCI_IMAGE_ID" \
-     --subnet-id "$OCI_SUBNET_ID" \
-     --assign-public-ip true 2>&1)
+while [ $COUNTER -lt $MAX_RETRIES ]; do
+    COUNTER=$((COUNTER + 1))
+    echo "----------------------------------------"
+    echo "Deneme Sayısı: $COUNTER - Tarih: $(date)"
+    
+    # Run the OCI CLI command and capture both standard output and standard error
+    output=$(oci compute instance launch \
+        --availability-domain "$AVAILABILITY_DOMAIN" \
+        --compartment-id "$TENANCY_ID" \
+        --shape "$SHAPE" \
+        --assign-public-ip true \
+        --subnet-id "$SUBNET_ID" \
+        --image-id "$IMAGE_ID" \
+        --ssh-authorized-keys "$SSH_AUTHORIZED_KEYS" \
+        --shape-config '{"ocpus": 4, "memoryInGBs": 24}' \
+        --display-name "Oracle-Free-ARM" 2>&1)
 
-   echo "$OUTPUT"
-
-   # Eğer çıktı içinde kapasite hatası varsa, sunucu henüz açılmamıştır
-   if [[ "$OUTPUT" == *"Out of host capacity"* ]]; then
-       echo "Kapasite yetersiz. 5 dakika bekleniyor..."
-       sleep 300 # 5 dakika (300 saniye) uyku modu
-   else
-       echo "Farklı bir durum veya BAŞARI yakalandı! Döngü sonlandırılıyor."
-       break
-   fi
+    # Check if the output contains the specific service error for out of host capacity
+    if [[ "$output" == *"Out of host capacity"* ]]; then
+        echo "Kapasite yetersiz. 5 dakika bekleniyor..."
+        sleep $SLEEP_TIME
+    # Check if Oracle hits us with too many requests limit
+    elif [[ "$output" == *"TooManyRequests"* || "$output" == *"Too many requests"* ]]; then
+        echo "Oracle: Çok fazla istek gönderildi (429). Döngü kırılmıyor, 5 dakika bekleniyor..."
+        sleep $SLEEP_TIME
+    # Check if the connection to Oracle API gateway timed out
+    elif [[ "$output" == *"timed out"* || "$output" == *"RequestException"* || "$output" == *"connection"* ]]; then
+        echo "Bağlantı zaman aşımına uğradı veya koptu (Oracle geç cevap verdi)."
+        echo "Döngü kırılmıyor, 5 dakika sonra tekrar denenecek..."
+        sleep $SLEEP_TIME
+    else
+        # If there is no specific error string, check if the output indicates success or unexpected error
+        if [[ "$output" == *"id"* && "$output" == *"lifecycle-state"* ]]; then
+            echo "TEBRİKLER! Sunucu başarıyla oluşturuldu!"
+            echo "$output"
+            break
+        else
+            echo "Bilinmeyen veya geçici bir yanıt alındı. Döngü riske atılmıyor, pusuya devam..."
+            echo "$output"
+            sleep $SLEEP_TIME
+        fi
+    fi
 done
